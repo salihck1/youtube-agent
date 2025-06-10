@@ -210,7 +210,7 @@ export default function Home() {
               </>
             ) : (
               <>
-                <div className="prose prose-invert max-w-none bg-gray-900 p-6 rounded-lg border border-gray-700 overflow-auto min-h-[250px] max-h-[450px]">
+                <div className="prose prose-invert max-w-none bg-gray-900 p-6 rounded-lg border border-gray-700 overflow-auto min-h-[250px] max-h-[410px]">
                   <ReactMarkdown>{script}</ReactMarkdown>
                 </div>
               </>
