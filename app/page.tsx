@@ -73,6 +73,9 @@ export default function Home() {
       const payload = {
         responseId,
         content: { text: editedScript },
+        topic: formData.topic,
+        tone: formData.tone,
+        genre: formData.genre,
         feedback,
         status,
         timestamp: responseTimestamp,
