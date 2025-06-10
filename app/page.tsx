@@ -127,6 +127,20 @@ export default function Home() {
     alert('Video rejected and sent for revision!')
   }
 
+  const handleDownloadScript = () => {
+    if (script) {
+      const blob = new Blob([script], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'youtube_script.txt'; // Default filename
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
   return (
     <main className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-4">
       {!hasScript ? (
@@ -187,9 +201,22 @@ export default function Home() {
       ) : (
         <div className="flex flex-col lg:flex-row gap-6 w-full max-w-7xl">
           <div className="flex-1 bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-              <svg className="w-6 h-6 mr-2 text-red-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm2 3a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm3 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
-              Your YouTube Script
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center justify-between">
+              <span className="flex items-center">
+                <svg className="w-6 h-6 mr-2 text-red-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm2 3a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm3 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
+                Your YouTube Script
+              </span>
+              {script && (
+                <button
+                  onClick={handleDownloadScript}
+                  className="bg-gray-600 text-white py-1 px-3 rounded-lg text-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800"
+                  title="Download Script"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                </button>
+              )}
             </h2>
             {isEditing ? (
               <>
@@ -262,7 +289,6 @@ export default function Home() {
                     }}
                     className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 font-semibold text-base transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     type="button"
-                    disabled={!!feedback.trim()}
                   >
                     Create New Script
                   </button>
