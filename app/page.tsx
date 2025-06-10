@@ -26,6 +26,8 @@ export default function Home() {
   const [responseId, setResponseId] = useState<string | null>(null)
   const [responseTimestamp, setResponseTimestamp] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,6 +71,7 @@ export default function Home() {
 
   const handleApproveOrRefineScript = async () => {
     try {
+      setIsProcessing(true)
       const status = feedback.trim() ? 'refine' : 'approved';
       const payload = {
         responseId,
@@ -86,9 +89,21 @@ export default function Home() {
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(status === 'refine' ? 'Failed to refine script' : 'Failed to approve script');
-      alert(status === 'refine' ? 'Refinement request sent with feedback!' : 'Script approved successfully!');
+      if (status === 'refine') {
+        const data = await response.json();
+        const newScript = data.content?.text || data.text || '';
+        setScript(newScript);
+        setEditedScript(newScript);
+        setFeedback('');
+        setStatusMessage('Refined script updated!');
+        setTimeout(() => setStatusMessage(''), 2000);
+      } else {
+        alert('Script approved successfully!');
+      }
     } catch (error) {
       alert('Error processing script. Please try again.');
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -113,139 +128,180 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-xl bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-8">YouTube Script Generator</h1>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="topic" className="block text-sm font-medium text-gray-700 mb-1">Topic</label>
-            <input
-              type="text"
-              id="topic"
-              value={formData.topic}
-              onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-              required
-            />
+    <main className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-4">
+      {!hasScript ? (
+        <div className="w-full max-w-2xl bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">Create Your YouTube Script</h1>
+            <p className="text-gray-400">Generate engaging, professional scripts for your YouTube videos</p>
           </div>
-          <div>
-            <label htmlFor="tone" className="block text-sm font-medium text-gray-700 mb-1">Tone</label>
-            <select
-              id="tone"
-              value={formData.tone}
-              onChange={(e) => setFormData({ ...formData, tone: e.target.value as FormData['tone'] })}
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-            >
-              <option value="Professional">Professional</option>
-              <option value="Casual">Casual</option>
-              <option value="Funny">Funny</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="genre" className="block text-sm font-medium text-gray-700 mb-1">Genre</label>
-            <select
-              id="genre"
-              value={formData.genre}
-              onChange={(e) => setFormData({ ...formData, genre: e.target.value as FormData['genre'] })}
-              className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-            >
-              <option value="Educational">Educational</option>
-              <option value="Entertainment">Entertainment</option>
-              <option value="Tutorial">Tutorial</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 font-semibold text-lg"
-          >
-            {isLoading ? 'Generating...' : 'Generate Script'}
-          </button>
-        </form>
-
-        {hasScript && (
-          <div className="mt-10 space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-lg font-semibold mb-2">Script</label>
-              {isEditing ? (
-                <>
-                  <textarea
-                    value={editedScript}
-                    onChange={(e) => setEditedScript(e.target.value)}
-                    className="w-full h-48 p-3 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 text-gray-800"
-                  />
-                  <div className="prose max-w-none bg-gray-50 p-4 rounded mt-4">
-                    <ReactMarkdown>{editedScript}</ReactMarkdown>
-                  </div>
-                  <div className="flex gap-4 mt-4">
-                    <button
-                      onClick={handleSaveEdit}
-                      className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-full hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-semibold"
-                      type="button"
-                    >
-                      Save Edit
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="prose max-w-none bg-gray-50 p-4 rounded">
-                    <ReactMarkdown>{script}</ReactMarkdown>
-                  </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Feedback (optional)</label>
-                    <input
-                      type="text"
-                      value={feedback}
-                      onChange={e => setFeedback(e.target.value)}
-                      placeholder="Enter feedback for refinement or leave empty to approve"
-                      className="w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                    />
-                  </div>
-                  <div className="flex gap-4 mt-4">
-                    <button
-                      onClick={handleApproveOrRefineScript}
-                      className={`flex-1 ${feedback.trim() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'} text-white py-2 px-4 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 font-semibold`}
-                      type="button"
-                    >
-                      {feedback.trim() ? 'Refine Script' : 'Approve Script'}
-                    </button>
-                  </div>
-                </>
-              )}
-              {statusMessage && (
-                <div className="mt-2 text-green-600 font-semibold">{statusMessage}</div>
-              )}
+              <label htmlFor="topic" className="block text-sm font-medium text-gray-300 mb-1">Video Topic <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                id="topic"
+                value={formData.topic}
+                onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2"
+                required
+              />
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="tone" className="block text-sm font-medium text-gray-300 mb-1">Tone</label>
+                <select
+                  id="tone"
+                  value={formData.tone}
+                  onChange={(e) => setFormData({ ...formData, tone: e.target.value as FormData['tone'] })}
+                  className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2"
+                >
+                  <option value="Professional">Professional</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Funny">Funny</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="genre" className="block text-sm font-medium text-gray-300 mb-1">Content Type</label>
+                <select
+                  id="genre"
+                  value={formData.genre}
+                  onChange={(e) => setFormData({ ...formData, genre: e.target.value as FormData['genre'] })}
+                  className="mt-1 block w-full rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2"
+                >
+                  <option value="Educational">Educational</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Tutorial">Tutorial</option>
+                </select>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-red-600 text-white py-3 px-4 rounded-full hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 font-semibold text-lg transition-colors duration-200"
+            >
+              {isLoading ? 'Generating...' : 'Generate Script'}
+            </button>
+          </form>
+        </div>
+      ) : (
+        <div className="flex flex-col lg:flex-row gap-6 w-full max-w-7xl">
+          <div className="flex-1 bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-red-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6zm2 3a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1zm3 0a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"></path></svg>
+              Your YouTube Script
+            </h2>
+            {isEditing ? (
+              <>
+                <textarea
+                  value={editedScript}
+                  onChange={(e) => setEditedScript(e.target.value)}
+                  className="w-full h-96 p-4 border border-gray-600 rounded-lg shadow-sm focus:border-red-500 focus:ring-red-500 text-gray-100 bg-gray-900 resize-y"
+                />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="bg-red-600 text-white py-2 px-6 rounded-full hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 font-semibold transition-colors duration-200"
+                    type="button"
+                  >
+                    Save Edit
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="prose prose-invert max-w-none bg-gray-900 p-6 rounded-lg border border-gray-700 overflow-auto min-h-[250px] max-h-[450px]">
+                  <ReactMarkdown>{script}</ReactMarkdown>
+                </div>
+              </>
+            )}
           </div>
-        )}
 
-        {/* Video Preview & Approval UI */}
-        {videoUrl && (
-          <div className="mt-10 space-y-4 bg-white p-6 rounded-xl shadow-lg">
-            <h2 className="text-xl font-bold mb-4">Video Preview</h2>
-            <video controls width="100%" src={videoUrl} className="rounded-lg shadow" />
-            <div className="flex gap-4 mt-4">
-              <button
-                onClick={handleApproveVideo}
-                className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg ${videoApproval === 'approved' ? 'bg-green-600 text-white' : 'bg-white border border-green-600 text-green-600 hover:bg-green-50'}`}
-                disabled={videoApproval === 'approved'}
-              >
-                Approve Video
-              </button>
-              <button
-                onClick={handleRejectVideo}
-                className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg ${videoApproval === 'rejected' ? 'bg-red-600 text-white' : 'bg-white border border-red-600 text-red-600 hover:bg-red-50'}`}
-                disabled={videoApproval === 'rejected'}
-              >
-                Reject Video
-              </button>
+          <div className="lg:w-80 w-full space-y-6">
+            <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                <svg className="w-6 h-6 mr-2 text-blue-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M3 4a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2H3zm0 2h14v10H3V6zm0 2H5a1 1 0 011 1v2a1 1 0 01-1 1H3v-4z" clipRule="evenodd"></path></svg>
+                Script Details
+              </h2>
+              <div className="space-y-2">
+                <p className="text-gray-300"><span className="font-semibold text-white">Topic:</span> {formData.topic}</p>
+                <p className="text-gray-300"><span className="font-semibold text-white">Tone:</span> {formData.tone}</p>
+                <p className="text-gray-300"><span className="font-semibold text-white">Type:</span> {formData.genre}</p>
+              </div>
             </div>
-            {videoApproval === 'approved' && <p className="text-green-600 font-bold mt-2">Video approved! Uploading to YouTube...</p>}
-            {videoApproval === 'rejected' && <p className="text-red-600 font-bold mt-2">Video rejected! Sent for revision.</p>}
+
+            {/* Feedback & Actions Section */}
+            {!isEditing && (
+              <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+                <h3 className="text-xl font-bold text-white mb-4">Feedback & Actions</h3>
+                <label htmlFor="feedback" className="block text-sm font-medium text-gray-300 mb-2">Feedback (Optional)</label>
+                <textarea
+                  id="feedback"
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  placeholder="Share your thoughts or suggestions..."
+                  className="w-full h-24 rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 resize-y"
+                />
+                <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                  <button
+                    onClick={handleApproveOrRefineScript}
+                    className={`flex-1 py-2 px-4 rounded-lg font-semibold text-base transition-colors duration-200 ${feedback.trim() ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'} text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800`}
+                    type="button"
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? 'Processing...' : feedback.trim() ? 'Refine Script' : 'Approve Script'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setHasScript(false)
+                      setScript('')
+                      setEditedScript('')
+                      setFeedback('')
+                      setVideoUrl(null)
+                      setVideoApproval(null)
+                    }}
+                    className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 font-semibold text-base transition-colors duration-200"
+                    type="button"
+                  >
+                    Create New Script
+                  </button>
+                </div>
+                {statusMessage && (
+                  <div className="mt-4 text-green-500 font-semibold text-center">{statusMessage}</div>
+                )}
+              </div>
+            )}
+
+            {videoUrl && (
+              <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+                <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <svg className="w-6 h-6 mr-2 text-purple-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm3.293-1.293a1 1 0 00-1.414 1.414L7.586 10l-3.707 3.707a1 1 0 101.414 1.414L9 11.414l3.707 3.707a1 1 0 001.414-1.414L10.414 10l3.707-3.707a1 1 0 00-1.414-1.414L9 8.586l-3.707-3.707z" clipRule="evenodd"></path></svg>
+                  Video Preview
+                </h2>
+                <video controls width="100%" src={videoUrl} className="rounded-lg shadow-md border border-gray-700" />
+                <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                  <button
+                    onClick={handleApproveVideo}
+                    className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg transition-colors duration-200 ${videoApproval === 'approved' ? 'bg-green-600 text-white' : 'bg-gray-700 text-green-400 border border-green-600 hover:bg-green-900 hover:text-white'}`}
+                    disabled={videoApproval === 'approved'}
+                  >
+                    Approve Video
+                  </button>
+                  <button
+                    onClick={handleRejectVideo}
+                    className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg transition-colors duration-200 ${videoApproval === 'rejected' ? 'bg-red-600 text-white' : 'bg-gray-700 text-red-400 border border-red-600 hover:bg-red-900 hover:text-white'}`}
+                    disabled={videoApproval === 'rejected'}
+                  >
+                    Reject Video
+                  </button>
+                </div>
+                {videoApproval === 'approved' && <p className="text-green-500 font-bold mt-2 text-center">Video approved! Uploading to YouTube...</p>}
+                {videoApproval === 'rejected' && <p className="text-red-500 font-bold mt-2 text-center">Video rejected! Sent for revision.</p>}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </main>
   )
 } 
