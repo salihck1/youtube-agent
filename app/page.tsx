@@ -265,7 +265,10 @@ export default function Home() {
                 <textarea
                   id="feedback"
                   value={feedback}
-                  onChange={e => setFeedback(e.target.value)}
+                  onChange={e => {
+                    setFeedback(e.target.value);
+                    console.log('Feedback:', e.target.value, 'Trimmed:', e.target.value.trim(), 'Disabled state:', !!e.target.value.trim());
+                  }}
                   placeholder="Share your thoughts or suggestions..."
                   className="w-full h-24 rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 resize-y"
                 />
@@ -287,8 +290,9 @@ export default function Home() {
                       setVideoUrl(null)
                       setVideoApproval(null)
                     }}
-                    className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 font-semibold text-base transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 font-semibold text-base transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-700"
                     type="button"
+                    disabled={!!feedback.trim()}
                   >
                     Create New Script
                   </button>
