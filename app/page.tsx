@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface FormData {
@@ -27,7 +27,30 @@ export default function Home() {
   const [responseTimestamp, setResponseTimestamp] = useState<string | null>(null)
   const [feedback, setFeedback] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isGeneratingMedia, setIsGeneratingMedia] = useState(false)
+  const [mediaGenerated, setMediaGenerated] = useState(false)
+  const [generatedMedia, setGeneratedMedia] = useState<any>(null)
+  const mediaRefs = useRef<(HTMLAudioElement | HTMLVideoElement)[]>([])
   
+  useEffect(() => {
+    const handlePlay = (event: Event) => {
+      mediaRefs.current.forEach(media => {
+        if (media !== event.target && !media.paused) {
+          media.pause();
+        }
+      });
+    };
+
+    mediaRefs.current.forEach(media => {
+      media.addEventListener('play', handlePlay);
+    });
+
+    return () => {
+      mediaRefs.current.forEach(media => {
+        media.removeEventListener('play', handlePlay);
+      });
+    };
+  }, [mediaGenerated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,6 +70,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      console.log("Fetch response:", response);
+      console.log("Fetch response status:", response.status);
       if (!response.ok) throw new Error('Failed to generate script')
       const data = await response.json()
       setScript(data.content?.text || data.text || "")
@@ -88,9 +113,21 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      console.log("Fetch response:", response);
+      console.log("Fetch response status:", response.status);
       if (!response.ok) throw new Error(status === 'refine' ? 'Failed to refine script' : 'Failed to approve script');
+      const data = await response.json();
+      // Ensure data is not null or undefined
+      if (!data) {
+        console.error("Backend response data is null or undefined.");
+        alert('Error processing script: Received empty or invalid response from backend.');
+        setIsProcessing(false);
+        return;
+      }
+      console.log('Backend response data received by frontend:', data);
+      console.log('Stringified backend data:', JSON.stringify(data, null, 2));
+
       if (status === 'refine') {
-        const data = await response.json();
         const newScript = data.content?.text || data.text || '';
         setScript(newScript);
         setEditedScript(newScript);
@@ -98,7 +135,58 @@ export default function Home() {
         setStatusMessage('Refined script updated!');
         setTimeout(() => setStatusMessage(''), 2000);
       } else {
-        alert('Script approved successfully!');
+        // Script approved, now process and show media generation screen using data from initial response
+        setIsGeneratingMedia(true);
+        try {
+          const extractGoogleDriveFileId = (url: string) => {
+            let fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (fileIdMatch) {
+              return fileIdMatch[1];
+            }
+            fileIdMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
+            return fileIdMatch ? fileIdMatch[1] : null;
+          };
+
+          // Explicitly capture files here with robust checks
+          let responseFiles: any[] = [];
+          if (data && data.json && Array.isArray(data.json) && data.json.length > 0 && data.json[0] && Array.isArray(data.json[0].files)) {
+            responseFiles = data.json[0].files;
+          }
+
+          console.log("Type of responseFiles before processing:", typeof responseFiles, responseFiles);
+          // Ensure responseFiles is an array before processing
+          const files = Array.isArray(responseFiles) ? responseFiles : [];
+          console.log("Files array for processing:", files);
+
+          const newGeneratedMedia = {
+            images: files.filter((file: any) => file && file.type === 'image').map((file: any) => {
+              const fileId = extractGoogleDriveFileId(file.url);
+              const srcUrl = fileId ? `https://n8n.srv810314.hstgr.cloud/webhook/media-proxy?fileId=${fileId}&type=image` : file.url;
+              return { src: srcUrl, alt: file.name, liked: false };
+            }),
+            audio: files.filter((file: any) => file && file.type === 'music').map((file: any) => {
+              const fileId = extractGoogleDriveFileId(file.url);
+              const srcUrl = fileId ? `https://n8n.srv810314.hstgr.cloud/webhook/media-proxy?fileId=${fileId}&type=audio` : file.url;
+              return { src: srcUrl, name: file.name, liked: false };
+            }),
+            videos: files.filter((file: any) => file && file.type === 'visual').map((file: any) => {
+              const fileId = extractGoogleDriveFileId(file.url);
+              const srcUrl = fileId ? `https://n8n.srv810314.hstgr.cloud/webhook/media-proxy?fileId=${fileId}&type=video` : file.url;
+              return { src: srcUrl, name: file.name, liked: false };
+            }),
+          };
+
+          console.log("New Generated Media object:", newGeneratedMedia);
+
+          setGeneratedMedia(newGeneratedMedia);
+          setMediaGenerated(true);
+
+        } catch (mediaError) {
+          alert('Error processing media assets. Please try again.');
+          console.error('Media processing error:', mediaError);
+        } finally {
+          setIsGeneratingMedia(false);
+        }
       }
     } catch (error) {
       alert('Error processing script. Please try again.');
@@ -107,25 +195,35 @@ export default function Home() {
     }
   }
 
-  const handleApproveVideo = async () => {
-    setVideoApproval('approved')
-    await fetch('https://your-n8n-endpoint.com/webhook/approve-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoUrl, status: 'approved' }),
-    })
-    alert('Video approved and sent for upload!')
-  }
+  const handleLike = (type: 'images' | 'audio' | 'videos', index: number) => {
+    setGeneratedMedia((prevMedia: any) => {
+      const newMedia = { ...prevMedia };
+      newMedia[type] = newMedia[type].map((item: any, i: number) =>
+        i === index ? { ...item, liked: !item.liked } : item
+      );
+      return newMedia;
+    });
+  };
 
-  const handleRejectVideo = async () => {
-    setVideoApproval('rejected')
-    await fetch('https://your-n8n-endpoint.com/webhook/reject-video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ videoUrl, status: 'rejected' }),
-    })
-    alert('Video rejected and sent for revision!')
-  }
+  // const handleApproveVideo = async () => {
+  //   setVideoApproval('approved')
+  //   await fetch('https://your-n8n-endpoint.com/webhook/approve-video', {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({ videoUrl, status: 'approved' }),
+  //   })
+  //   alert('Video approved and sent for upload!')
+  // }
+
+  // const handleRejectVideo = async () => {
+  //   setVideoApproval('rejected')
+  //   await fetch('https://your-n8n-endpoint.com/webhook/reject-video', {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({ videoUrl, status: 'rejected' }),
+  //   })
+  //   alert('Video rejected and sent for revision!')
+  // }
 
   const handleDownloadScript = () => {
     if (script) {
@@ -143,7 +241,142 @@ export default function Home() {
 
   return (
     <main className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center p-4">
-      {!hasScript ? (
+      {isGeneratingMedia ? (
+        <div className="flex flex-col items-center justify-center h-[500px] w-full max-w-2xl bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700 text-white">
+          <div className="w-24 h-24 relative mb-6">
+            {/* Placeholder for spinning icon */}
+            <div className="absolute inset-0 rounded-full border-4 border-t-4 border-red-500 border-opacity-50 animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-12 h-12 text-red-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M9.243 3.03a1 1 0 01.558 1.155l-1.5 5a1 1 0 01-1.897-.046l-2.5-5A1 1 0 014.243 3.03zm4.243 0a1 1 0 01.558 1.155l-1.5 5a1 1 0 01-1.897-.046l-2.5-5A1 1 0 018.243 3.03zm-1.03 8.92a1 1 0 011.897.046l2.5 5a1 1 0 01-1.794.9l-1.5-5a1 1 0 01-.558-1.155zm-4.243 0a1 1 0 011.897.046l2.5 5a1 1 0 01-1.794.9l-1.5-5a1 1 0 01-.558-1.155z" clipRule="evenodd"></path></svg>
+            </div>
+          </div>
+          <h2 className="text-2xl font-bold mb-4">Creating Your Media</h2>
+          <p className="text-gray-400 mb-6">Analyzing your Script...</p>
+          <div className="w-full bg-gray-700 rounded-full h-2.5 mb-4">
+            <div className="bg-red-500 h-2.5 rounded-full animate-pulse" style={{ width: '52%' }}></div>
+          </div>
+          <p className="text-gray-400 text-sm">52% complete</p>
+        </div>
+      ) : mediaGenerated ? (
+        <div className="w-full max-w-7xl flex flex-col items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700 w-full">
+            <button
+              onClick={() => setMediaGenerated(false)} // Go back to script view
+              className="mb-6 text-gray-400 hover:text-white flex items-center"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+              Generate New Media
+            </button>
+            <h2 className="text-2xl font-bold text-white mb-4">Assets from the script</h2>
+            
+
+            {generatedMedia.images && generatedMedia.images.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-4">Images <span className="text-gray-400 text-sm">({generatedMedia.images.length})</span></h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedMedia.images.map((image: any, index: number) => (
+                    <div key={index} className="bg-gray-700 rounded-lg overflow-hidden shadow-md">
+                      <img src={image.src} alt={image.alt} className="w-full h-48 object-cover" crossOrigin="anonymous" />
+                      <div className="p-4">
+                        <p className="text-white font-semibold flex items-center">
+                          {image.alt}
+                          <button onClick={() => {}} className="ml-2 focus:outline-none text-gray-400 hover:text-white">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.76 0 3.32.73 4.45 1.95L14 12h6V6l-2.35 2.35z"
+                              ></path>
+                            </svg>
+                          </button>
+                        </p>
+                        <p className="text-gray-400 text-sm mt-1">{image.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {generatedMedia.audio && generatedMedia.audio.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-4">Generated Audio <span className="text-gray-400 text-sm">({generatedMedia.audio.length})</span></h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedMedia.audio.map((audio: any, index: number) => (
+                    <div key={index} className="bg-gray-700 rounded-lg p-4 flex flex-col items-start">
+                      <audio
+                        controls
+                        src={audio.src}
+                        className="w-full mb-2"
+                        crossOrigin="anonymous"
+                        ref={el => {
+                          if (el && !mediaRefs.current.includes(el)) {
+                            mediaRefs.current.push(el);
+                          }
+                        }}
+                      ></audio>
+                      <div>
+                        <p className="text-white font-semibold flex items-center">
+                          {audio.name}
+                          <button onClick={() => {}} className="ml-2 focus:outline-none text-gray-400 hover:text-white">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.76 0 3.32.73 4.45 1.95L14 12h6V6l-2.35 2.35z"
+                              ></path>
+                            </svg>
+                          </button>
+                        </p>
+                        <p className="text-gray-400 text-sm mt-1">{audio.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {generatedMedia.videos && generatedMedia.videos.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-4">Generated Videos <span className="text-gray-400 text-sm">({generatedMedia.videos.length})</span></h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedMedia.videos.map((video: any, index: number) => (
+                    <div key={index} className="bg-gray-700 rounded-lg p-4">
+                      <video
+                        controls
+                        src={video.src}
+                        className="w-full rounded-md"
+                        crossOrigin="anonymous"
+                        ref={el => {
+                          if (el && !mediaRefs.current.includes(el)) {
+                            mediaRefs.current.push(el);
+                          }
+                        }}
+                      ></video>
+                      <div className="mt-2">
+                        <p className="text-white font-semibold flex items-center">
+                          {video.name}
+                          <button onClick={() => {}} className="ml-2 focus:outline-none text-gray-400 hover:text-white">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.76 0 3.32.73 4.45 1.95L14 12h6V6l-2.35 2.35z"
+                              ></path>
+                            </svg>
+                          </button>
+                        </p>
+                        <p className="text-gray-400 text-sm mt-1">{video.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="text-center mt-8">
+              <button
+                onClick={() => {}}
+                className="bg-green-600 text-white py-3 px-6 rounded-full hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 font-semibold text-lg transition-colors duration-200"
+              >
+                Approve Assets
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        !hasScript ? (
         <div className="w-full max-w-2xl bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-700">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">Create Your YouTube Script</h1>
@@ -267,7 +500,6 @@ export default function Home() {
                   value={feedback}
                   onChange={e => {
                     setFeedback(e.target.value);
-                    console.log('Feedback:', e.target.value, 'Trimmed:', e.target.value.trim(), 'Disabled state:', !!e.target.value.trim());
                   }}
                   placeholder="Share your thoughts or suggestions..."
                   className="w-full h-24 rounded-md border border-gray-600 bg-gray-700 text-white shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 resize-y"
@@ -289,6 +521,7 @@ export default function Home() {
                       setFeedback('')
                       setVideoUrl(null)
                       setVideoApproval(null)
+                      setMediaGenerated(false) // Reset media generated state
                     }}
                     className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 font-semibold text-base transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-700"
                     type="button"
@@ -303,7 +536,8 @@ export default function Home() {
               </div>
             )}
 
-            {videoUrl && (
+              {/* Video Preview Section */}
+              {videoUrl && !mediaGenerated && (
               <div className="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
                 <h2 className="text-xl font-bold text-white mb-4 flex items-center">
                   <svg className="w-6 h-6 mr-2 text-purple-400" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm3.293-1.293a1 1 0 00-1.414 1.414L7.586 10l-3.707 3.707a1 1 0 101.414 1.414L9 11.414l3.707 3.707a1 1 0 001.414-1.414L10.414 10l3.707-3.707a1 1 0 00-1.414-1.414L9 8.586l-3.707-3.707z" clipRule="evenodd"></path></svg>
@@ -312,14 +546,18 @@ export default function Home() {
                 <video controls width="100%" src={videoUrl} className="rounded-lg shadow-md border border-gray-700" />
                 <div className="flex flex-col sm:flex-row gap-4 mt-4">
                   <button
-                    onClick={handleApproveVideo}
+                      onClick={() => {
+                        // handleApproveVideo()
+                      }}
                     className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg transition-colors duration-200 ${videoApproval === 'approved' ? 'bg-green-600 text-white' : 'bg-gray-700 text-green-400 border border-green-600 hover:bg-green-900 hover:text-white'}`}
                     disabled={videoApproval === 'approved'}
                   >
                     Approve Video
                   </button>
                   <button
-                    onClick={handleRejectVideo}
+                      onClick={() => {
+                        // handleRejectVideo()
+                      }}
                     className={`flex-1 py-2 px-4 rounded-full font-semibold text-lg transition-colors duration-200 ${videoApproval === 'rejected' ? 'bg-red-600 text-white' : 'bg-gray-700 text-red-400 border border-red-600 hover:bg-red-900 hover:text-white'}`}
                     disabled={videoApproval === 'rejected'}
                   >
@@ -332,7 +570,17 @@ export default function Home() {
             )}
           </div>
         </div>
+        )
       )}
     </main>
   )
-} 
+}
+
+const extractGoogleDriveFileId = (url: string) => {
+  let fileIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fileIdMatch) {
+    return fileIdMatch[1];
+  }
+  fileIdMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
+  return fileIdMatch ? fileIdMatch[1] : null;
+}; 
